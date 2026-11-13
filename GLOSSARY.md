@@ -49,11 +49,11 @@ removes the chip. This package's only output. _Avoid_: Event bus, Zentui API
 publisher key. It is not a guarantee that the chip is visible at the current width. _Avoid_:
 Enabled, visible, owned, available
 
-**Fitted value**: An LSP status text cut at a grapheme boundary to at most 256 UTF-16 code units
-and marked with an ellipsis, so the protocol never silently ignores an update. The cut keeps
-SGR styling and appends a closing reset when styling is retained. Only a value past the protocol
-limit is ever fitted, so the chip differs from pi-lens's own text in that case alone. _Avoid_:
-Label, truncated, clipped, shortened
+**Fitted value**: An LSP status text cut at an atomic unit boundary (a whole SGR sequence or a
+grapheme cluster) to at most 256 UTF-16 code units and marked with an ellipsis, so the protocol
+never silently ignores an update. The cut keeps SGR styling and appends a closing reset when
+styling is retained. Only a value past the protocol limit is ever fitted, so the chip differs
+from pi-lens's own text in that case alone. _Avoid_: Label, truncated, clipped, shortened
 
 **Tee ownership**: The condition that this package's tee is the own `setStatus` property of the
 current `ui` object. Every publish checks it and re-installs the tee when a later tee has

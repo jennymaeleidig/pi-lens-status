@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createTee } from "../src/tee.ts";
+import type { FakeUi, Harness } from "./helpers.ts";
 import { createHarness, createUi, probes, variables } from "./helpers.ts";
 
 const PUBLISHER_KEY = "pi-lens-status:lsp";
 const LENS_KEY = "pi-lens-lsp";
+
+async function started(
+  options: { zentuiActive?: boolean } = {},
+): Promise<{ harness: Harness; fake: FakeUi }> {
+  const harness = createHarness();
+  const fake = createUi();
+  harness.setZentuiActive(options.zentuiActive ?? true);
+  await harness.start({ ui: fake.ui });
+  return { harness, fake };
+}
 
 test("the tee installs, forwards every lens call unchanged, and shutdown restores it", async () => {
   const harness = createHarness();
@@ -42,9 +53,7 @@ test("the tee installs, forwards every lens call unchanged, and shutdown restore
 });
 
 test("a duplicate of the previously published value emits nothing", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
@@ -53,9 +62,7 @@ test("a duplicate of the previously published value emits nothing", async () => 
 });
 
 test("undefined and empty text each remove the value", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   fake.ui.setStatus(LENS_KEY, undefined);
@@ -71,9 +78,7 @@ test("undefined and empty text each remove the value", async () => {
 });
 
 test("a wrong-typed value publishes nothing and still forwards", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   const wrongType = 42 as unknown as string;
@@ -84,9 +89,7 @@ test("a wrong-typed value publishes nothing and still forwards", async () => {
 });
 
 test("a call under another key forwards unchanged and publishes nothing", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   fake.ui.setStatus("pi-lens-widget", "LSP summary");
   fake.ui.setStatus("pi-vim-status:vim", "NORMAL");
@@ -99,9 +102,7 @@ test("a call under another key forwards unchanged and publishes nothing", async 
 });
 
 test("an inactive Zentui verdict clears the retained value", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   harness.setZentuiActive(false);
@@ -114,9 +115,7 @@ test("an inactive Zentui verdict clears the retained value", async () => {
 });
 
 test("every refresh emits a fresh mutable capability probe for the publisher key", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   fake.ui.setStatus(LENS_KEY, "LSP ✗");
@@ -135,11 +134,7 @@ test("every refresh emits a fresh mutable capability probe for the publisher key
 
 test("a rejected startup value is retried when Zentui becomes active, then stops", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const harness = createHarness();
-  const fake = createUi();
-  harness.setZentuiActive(false);
-
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started({ zentuiActive: false });
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   assert.deepEqual(variables(harness), [], "the inactive probe drops the startup value");
 
@@ -154,11 +149,7 @@ test("a rejected startup value is retried when Zentui becomes active, then stops
 
 test("the retry is bounded", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const harness = createHarness();
-  const fake = createUi();
-  harness.setZentuiActive(false);
-
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started({ zentuiActive: false });
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   for (let i = 0; i < 60; i += 1) t.mock.timers.tick(100);
 
@@ -168,11 +159,7 @@ test("the retry is bounded", async (t) => {
 
 test("shutdown cancels a pending retry and emits no removal without a published value", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const harness = createHarness();
-  const fake = createUi();
-  harness.setZentuiActive(false);
-
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started({ zentuiActive: false });
   fake.ui.setStatus(LENS_KEY, "LSP ✓");
   await harness.shutdown({ ui: fake.ui });
   harness.setZentuiActive(true);
@@ -182,9 +169,7 @@ test("shutdown cancels a pending retry and emits no removal without a published 
 });
 
 test("a later tee stacked above this one lets both consume their own keys", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   const laterCalls: Array<{ key: string; text: string | undefined }> = [];
   const earlier = fake.ui.setStatus;
@@ -230,9 +215,7 @@ test("a second session_start on a new ui restores the old object and starts clea
 });
 
 test("a later tee installed over ours still reaches both consumers", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   // A later bridge installs above us after our session start.
   const later = createTee(() => {});
@@ -243,9 +226,7 @@ test("a later tee installed over ours still reaches both consumers", async () =>
 });
 
 test("over-limit text is fitted with an ellipsis and a closing reset within the limit", async () => {
-  const harness = createHarness();
-  const fake = createUi();
-  await harness.start({ ui: fake.ui });
+  const { harness, fake } = await started();
 
   const styled = `\u001b[32mLSP ✓ ${"x".repeat(300)}\u001b[0m`;
   fake.ui.setStatus(LENS_KEY, styled);
@@ -263,6 +244,65 @@ test("over-limit text is fitted with an ellipsis and a closing reset within the 
   assert.equal(plainFitted.length, 256);
   assert.ok(plainFitted.endsWith("…"));
   assert.equal(plainFitted.includes("\u001b[0m"), false);
+});
+
+test("a malformed publication during a pending retry leaves the retry and value alone", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { harness, fake } = await started({ zentuiActive: false });
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  const probesBefore = probes(harness).length;
+  harness.setZentuiActive(true);
+
+  const wrongType = 42 as unknown as string;
+  fake.ui.setStatus(LENS_KEY, wrongType);
+  assert.equal(probes(harness).length, probesBefore, "the malformed publication emits no probe");
+  assert.deepEqual(variables(harness), [], "the malformed publication mirrors nothing");
+
+  t.mock.timers.tick(100);
+  assert.deepEqual(variables(harness), [{ key: PUBLISHER_KEY, text: "LSP ✓" }]);
+  assert.equal(fake.calls.at(-1)?.text, wrongType, "the malformed call still forwards");
+});
+
+test("an over-limit cut never splits an SGR sequence", async () => {
+  const { harness, fake } = await started();
+
+  const prefix = "a".repeat(252);
+  fake.ui.setStatus(LENS_KEY, `${prefix}\u001b[31m${"b".repeat(100)}`);
+  const fitted = variables(harness).at(-1)?.text ?? "";
+
+  assert.equal(fitted, `${prefix}…`);
+  assert.equal(fitted.includes("\u001b"), false, "no partial escape survives the cut");
+});
+
+test("retained SGR gets exactly one trailing reset", async () => {
+  const { harness, fake } = await started();
+
+  fake.ui.setStatus(LENS_KEY, `\u001b[32m${"x".repeat(300)}\u001b[0m`);
+  const fitted = variables(harness).at(-1)?.text ?? "";
+
+  assert.equal(fitted.length, 256);
+  assert.ok(fitted.startsWith("\u001b[32m"));
+  assert.ok(fitted.endsWith("…\u001b[0m"));
+  assert.equal(fitted.split("\u001b[0m").length - 1, 1);
+});
+
+test("fitted text never exceeds the protocol limit", async () => {
+  const { harness, fake } = await started();
+
+  for (let length = 245; length <= 260; length += 1) {
+    fake.ui.setStatus(LENS_KEY, `\u001b[1;31m${"x".repeat(length)}\u001b[0m`);
+    const fitted = variables(harness).at(-1)?.text ?? "";
+    assert.ok(fitted.length <= 256, `length ${fitted.length} exceeds the limit`);
+  }
+});
+
+test("under-limit SGR text passes through unchanged", async () => {
+  const { harness, fake } = await started();
+
+  const text = "\u001b[32mLSP ✓\u001b[0m";
+  fake.ui.setStatus(LENS_KEY, text);
+
+  assert.equal(variables(harness).at(-1)?.text, text);
 });
 
 test("a non-TUI session installs nothing and emits nothing", async () => {
