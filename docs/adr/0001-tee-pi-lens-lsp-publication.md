@@ -22,12 +22,15 @@ drifting whenever upstream changes either. The published string is the only stab
 
 Install a tee over `ctx.ui.setStatus` on the `ui` object pi hands to every extension in one
 bind, forward every call unchanged, and mirror the calls keyed `pi-lens-lsp` onto Zentui's
-custom-variable bus under the publisher key `pi-lens-status:lsp`.
+custom-variable bus under the publisher key `pi-lens-status:lsp`. The tee is a deliberate copy
+of the sibling status bridge's tee; extracting a shared package waits for a third consumer.
 
-The mirrored text is pi-lens's, safe SGR sequences included. The bridge does not reformat it,
-re-derive server names, or add a prefix. A predecessor failure under `pi-lens-lsp` is contained
-— no throw escapes and nothing is mirrored — while any other key's failure is forwarded
-unchanged.
+The mirrored text is pi-lens's, safe SGR sequences included. The bridge does not re-derive
+server names or add a prefix, and it passes the text through verbatim with two exceptions: text
+past Zentui's 256-unit protocol limit is fitted with an ellipsis and, when it retains SGR, one
+closing reset; and a value identical to the one previously published is not emitted again. A
+predecessor failure under `pi-lens-lsp` is contained — no throw escapes and nothing is mirrored —
+while any other key's failure is forwarded unchanged.
 
 ## Consequences
 

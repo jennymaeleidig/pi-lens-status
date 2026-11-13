@@ -58,11 +58,7 @@ export default function piLensStatus(pi: ExtensionAPI): void {
     return active;
   };
 
-  /**
-   * Zentui may report inactive before its editor is decorated, and it drops
-   * positive updates while inactive. Retry a rejected startup value briefly,
-   * then stop; a later pi-lens publish retries again.
-   */
+  /** Retry a rejected startup value every RETRY_MS for at most RETRY_LIMIT attempts. */
   const startRetry = (): void => {
     if (retry !== undefined) return;
     attempts = 0;
@@ -80,6 +76,9 @@ export default function piLensStatus(pi: ExtensionAPI): void {
   };
 
   const publish = (raw: string | undefined): void => {
+    // A text of the wrong type is nothing to do: keep the retained value and
+    // let any pending retry continue.
+    if (raw !== undefined && typeof raw !== "string") return;
     latest = raw;
     if (refresh() || raw === undefined) {
       stopRetry();

@@ -5,7 +5,7 @@
  */
 
 /** Zentui's custom-variable protocol limit, in UTF-16 code units. */
-export const MAX_TEXT_CODE_UNITS = 256;
+const MAX_TEXT_CODE_UNITS = 256;
 
 /** One decision: the value to hold, and whether it must be published now. */
 export type Mirror = Readonly<{
@@ -19,24 +19,39 @@ const RESET = "\x1b[0m";
 const SGR_PRESENT = /\x1b\[[0-9;:]*m/;
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-/** Cut at a grapheme boundary, measuring UTF-16 code units against the budget. */
+/** Split text into atomic units: whole SGR sequences and grapheme clusters. */
+function units(text: string): string[] {
+  const result: string[] = [];
+  let last = 0;
+  for (const match of text.matchAll(/\x1b\[[0-9;:]*m/g)) {
+    const index = match.index ?? last;
+    for (const { segment } of segmenter.segment(text.slice(last, index))) result.push(segment);
+    result.push(match[0]);
+    last = index + match[0].length;
+  }
+  for (const { segment } of segmenter.segment(text.slice(last))) result.push(segment);
+  return result;
+}
+
+/** Cut at a unit boundary, measuring UTF-16 code units against the budget. */
 function cut(text: string, budget: number): string {
   let used = 0;
   let head = "";
-  // A single grapheme wider than the budget leaves only the ellipsis.
-  for (const { segment } of segmenter.segment(text)) {
-    if (used + segment.length > budget) break;
-    head += segment;
-    used += segment.length;
+  // A single unit wider than the budget leaves only the ellipsis.
+  for (const unit of units(text)) {
+    if (used + unit.length > budget) break;
+    head += unit;
+    used += unit.length;
   }
   return head;
 }
 
 /**
  * Fit LSP status text to the protocol limit. Text at or under the limit is
- * returned unchanged, SGR included. Longer text is cut at a grapheme boundary
- * and marked with an ellipsis inside the budget; if the retained prefix carries
- * SGR, a closing reset is appended so colour cannot leak into the border.
+ * returned unchanged, SGR included. Longer text is cut at an atomic unit
+ * boundary and marked with an ellipsis inside the budget; if the retained
+ * prefix carries SGR, a closing reset is appended so colour cannot leak into
+ * the border.
  */
 function fit(text: string): string | undefined {
   if (text === "") return undefined;
@@ -46,8 +61,9 @@ function fit(text: string): string | undefined {
   const head = cut(text, budget);
   if (!SGR_PRESENT.test(head)) return head + ELLIPSIS;
 
-  const rest = cut(text, budget - RESET.length);
-  return rest + ELLIPSIS + RESET;
+  const styled = cut(text, budget - RESET.length);
+  if (!SGR_PRESENT.test(styled)) return styled + ELLIPSIS;
+  return styled + ELLIPSIS + RESET;
 }
 
 /**
