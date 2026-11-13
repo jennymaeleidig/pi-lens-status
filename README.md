@@ -4,9 +4,10 @@ Show pi-lens's LSP status in a Zentui Minimalist border slot, beside your IDE an
 chips — and nothing at all when pi-lens publishes no LSP status.
 
 > Status: implemented for the first end-to-end slice. The design is settled and written down in
-> [`GLOSSARY.md`](GLOSSARY.md) and the two architectural bets in
-> [`docs/adr/0001-tee-pi-lens-lsp-publication.md`](docs/adr/0001-tee-pi-lens-lsp-publication.md)
-> and [`docs/adr/0002-mirror-only-no-fallback-write.md`](docs/adr/0002-mirror-only-no-fallback-write.md).
+> [`GLOSSARY.md`](GLOSSARY.md) and the three architectural bets in
+> [`docs/adr/0001-tee-pi-lens-lsp-publication.md`](docs/adr/0001-tee-pi-lens-lsp-publication.md),
+> [`docs/adr/0002-mirror-only-no-fallback-write.md`](docs/adr/0002-mirror-only-no-fallback-write.md),
+> and [`docs/adr/0003-retry-the-startup-value.md`](docs/adr/0003-retry-the-startup-value.md).
 
 ## Install
 
