@@ -318,3 +318,87 @@ test("a non-TUI session installs nothing and emits nothing", async () => {
   assert.deepEqual(variables(harness), []);
   assert.deepEqual(harness.emitted, []);
 });
+
+// --- pi-lens-issues: the second mirrored channel ---
+
+const ISSUES_KEY = "pi-lens-issues";
+const ISSUES_PUBLISHER_KEY = "pi-lens-status:issues";
+
+test("mirrors the issues status under its own key, independently of the LSP status", async () => {
+  const { harness, fake } = await started();
+
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  fake.ui.setStatus(ISSUES_KEY, "●2E !3W");
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  fake.ui.setStatus(ISSUES_KEY, "✓ clean");
+
+  assert.deepEqual(variables(harness), [
+    { key: PUBLISHER_KEY, text: "LSP ✓" },
+    { key: ISSUES_PUBLISHER_KEY, text: "●2E !3W" },
+    { key: ISSUES_PUBLISHER_KEY, text: "✓ clean" },
+  ]);
+});
+
+test("a removal on one channel leaves the other published", async () => {
+  const { harness, fake } = await started();
+
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  fake.ui.setStatus(ISSUES_KEY, "●1E");
+  fake.ui.setStatus(ISSUES_KEY, undefined);
+
+  assert.deepEqual(variables(harness), [
+    { key: PUBLISHER_KEY, text: "LSP ✓" },
+    { key: ISSUES_PUBLISHER_KEY, text: "●1E" },
+    { key: ISSUES_PUBLISHER_KEY, text: undefined },
+  ]);
+});
+
+test("an inactive Zentui verdict clears both retained values", async () => {
+  const { harness, fake } = await started();
+
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  fake.ui.setStatus(ISSUES_KEY, "●1E");
+  harness.setZentuiActive(false);
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  fake.ui.setStatus(ISSUES_KEY, "●1E");
+
+  assert.deepEqual(variables(harness), [
+    { key: PUBLISHER_KEY, text: "LSP ✓" },
+    { key: ISSUES_PUBLISHER_KEY, text: "●1E" },
+    { key: PUBLISHER_KEY, text: undefined },
+    { key: ISSUES_PUBLISHER_KEY, text: undefined },
+  ]);
+});
+
+test("a rejected issues publication retries independently of the LSP channel", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { harness, fake } = await started({ zentuiActive: false });
+
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  fake.ui.setStatus(ISSUES_KEY, "●1E");
+  harness.setZentuiActive(true);
+  t.mock.timers.tick(100);
+
+  assert.deepEqual(variables(harness), [
+    { key: PUBLISHER_KEY, text: "LSP ✓" },
+    { key: ISSUES_PUBLISHER_KEY, text: "●1E" },
+  ]);
+});
+
+test("a failed write under either mirrored key is contained; another key still throws", async () => {
+  const harness = createHarness();
+  const fake = createUi();
+  const original = fake.ui.setStatus;
+  fake.ui.setStatus = function (this: unknown, key: string, text: string | undefined): void {
+    if (key === ISSUES_KEY) throw new Error("issues failed");
+    if (key === "other") throw new Error("other failed");
+    original.call(this, key, text);
+  };
+
+  await harness.start({ ui: fake.ui });
+
+  assert.doesNotThrow(() => fake.ui.setStatus(ISSUES_KEY, "●1E"));
+  fake.ui.setStatus(LENS_KEY, "LSP ✓");
+  assert.deepEqual(variables(harness), [{ key: PUBLISHER_KEY, text: "LSP ✓" }]);
+  assert.throws(() => fake.ui.setStatus("other", "x"), /other failed/);
+});

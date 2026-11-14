@@ -1,20 +1,19 @@
 /**
  * The tee: a data property installed over `ctx.ui.setStatus` on the one `ui`
  * object pi hands to every extension in a bind. Every call is forwarded
- * unchanged; only calls keyed `pi-lens-lsp` are copied to this package's
- * consumer.
+ * unchanged; only calls under a status key this package mirrors are copied to
+ * its consumer.
  */
 
-/** The key pi-lens writes its LSP status text under. */
-export const LENS_STATUS_KEY = "pi-lens-lsp";
+import { isStatusKey, type StatusKey } from "./keys.ts";
 
 /** The narrow shape the tee needs from a `ui` object. */
 export type StatusHost = {
   setStatus(key: string, text: string | undefined): void;
 };
 
-/** What the tee hands a teed LSP status text to. */
-export type StatusConsumer = (text: string | undefined) => void;
+/** What the tee hands a teed status text to, with the key it arrived under. */
+export type StatusConsumer = (key: StatusKey, text: string | undefined) => void;
 
 /** Install and restore one tee. */
 export interface Tee {
@@ -54,15 +53,16 @@ export function createTee(consume: StatusConsumer): Tee {
       const next = depth === 1 ? forward : base;
       if (next !== undefined) next.call(this, key, text);
     } catch (error) {
-      // Our own key's failed write is nothing to do: contain it and publish nothing.
-      // Any other key is forwarded unchanged, so other extensions still see their faults.
-      if (key !== LENS_STATUS_KEY) throw error;
+      // A mirrored key's failed write is nothing to do: contain it and publish
+      // nothing. Any other key is forwarded unchanged, so other extensions still
+      // see their faults.
+      if (!isStatusKey(key)) throw error;
       failed = true;
     } finally {
       depth -= 1;
-      if (outermost && !restored && !failed && key === LENS_STATUS_KEY) {
+      if (outermost && !restored && !failed && isStatusKey(key)) {
         try {
-          consume(text);
+          consume(key, text);
         } catch {
           // A defect in the mirror must never stop the caller's own write.
         }

@@ -1,13 +1,14 @@
 # pi-lens-status
 
-Show pi-lens's LSP status in a Zentui Minimalist border slot, beside your IDE and Vim mode
-chips — and nothing at all when pi-lens publishes no LSP status.
+Show pi-lens's LSP and diagnostics status in Zentui Minimalist border slots, beside your IDE and
+Vim mode chips — and nothing at all for a status pi-lens does not publish.
 
-> Status: implemented for the first end-to-end slice. The design is settled and written down in
-> [`GLOSSARY.md`](GLOSSARY.md) and the three architectural bets in
+> Status: implemented for both pi-lens status keys. The design is settled and written down in
+> [`GLOSSARY.md`](GLOSSARY.md) and the architectural bets in
 > [`docs/adr/0001-tee-pi-lens-lsp-publication.md`](docs/adr/0001-tee-pi-lens-lsp-publication.md),
 > [`docs/adr/0002-mirror-only-no-fallback-write.md`](docs/adr/0002-mirror-only-no-fallback-write.md),
-> and [`docs/adr/0003-retry-the-startup-value.md`](docs/adr/0003-retry-the-startup-value.md).
+> [`docs/adr/0003-retry-the-startup-value.md`](docs/adr/0003-retry-the-startup-value.md), and
+> [`docs/adr/0004-mirror-the-issues-status-too.md`](docs/adr/0004-mirror-the-issues-status-too.md).
 
 ## Install
 
@@ -24,10 +25,9 @@ pi install npm:pi-zentui
 ```
 
 This package must load **before** `pi-lens`. The tee has to exist when `pi-lens` publishes its
-startup LSP status from its own `session_start`; loaded after it, the tee misses that first text
-and the chip stays empty until the next LSP status repaint. Zentui or another bridge may install
-its own controller over the tee later in the same start, so every publish re-installs the tee
-above it.
+startup statuses from its own `session_start`; loaded after it, the tee misses those first texts
+and the chips stay empty until the next repaint. Zentui or another bridge may install its own
+controller over the tee later in the same start, so every publish re-installs the tee above it.
 
 `pi install` appends to `packages`. If `pi-lens-status`, `pi-lens` or `pi-zentui` is already
 installed, put the `pi-lens-status` source first in the array and restart. Update the git source
@@ -35,22 +35,28 @@ with `pi update git:github.com/jennymaeleidig/pi-lens-status`.
 
 ## Configuration
 
-Two things make the chip visible. This package writes neither of them and reads neither file.
+Two things make the chips visible. This package writes neither of them and reads neither file.
 
-1. **pi-lens uses the compact LSP status.** In `~/.pi-lens/config.json` (the global pi-lens
+1. **pi-lens publishes the statuses you want.** In `~/.pi-lens/config.json` (the global pi-lens
    configuration), set:
 
    ```json
-   { "ui": { "compactLspStatus": true } }
+   { "ui": { "compactLspStatus": true, "issuesStatus": true } }
    ```
 
-   The chip is pi-lens's own text: `LSP ✓` in the success role, `LSP ✗` in the error role, and a
-   dim `LSP ✗` when nothing is warm. With compact off, pi-lens publishes the full server list,
+   The LSP chip is pi-lens's own text: `LSP ✓` in the success role, `LSP ✗` in the error role, and
+   a dim `LSP ✗` when nothing is warm. With compact off, pi-lens publishes the full server list,
    which is longer and fitted to the protocol limit. `ui.hideLspStatus: true` suppresses
-   `pi-lens-lsp` entirely, so the chip stays gone; this package follows that setting by doing
+   `pi-lens-lsp` entirely, so that chip stays gone; this package follows that setting by doing
    nothing else.
 
-2. **Zentui names the publisher key and references it in a slot.** In the `minimalist` style,
+   The issues chip is opt-in through `ui.issuesStatus`. With it on, the chip is pi-lens's own
+   diagnostics summary: `●2E !3W` for blocking and other findings, `⚠ N unchecked` while a file
+   has not been checked, `✓ clean` only after a checked file has no findings, and a neutral
+   `suppressed: N` suffix when applicable. It carries no SGR and is passed through verbatim. On a
+   pi-lens release that does not publish `pi-lens-issues`, this chip is simply absent.
+
+2. **Zentui names each publisher key and references it in a slot.** In the `minimalist` style,
    under `variables` and `formats`:
 
    ```json
@@ -63,10 +69,11 @@ Two things make the chip visible. This package writes neither of them and reads 
              "variables": {
                "ide": "pi-ide-status:ide",
                "vim": "pi-vim-status:vim",
-               "lens": "pi-lens-status:lsp"
+               "lens": "pi-lens-status:lsp",
+               "issues": "pi-lens-status:issues"
              },
              "formats": {
-               "bottomRight": "$ide$join_sep$vim$join_sep$lens"
+               "bottomRight": "$ide$join_sep$lens$join_sep$issues$join_sep$vim"
              }
            }
          }
@@ -75,50 +82,57 @@ Two things make the chip visible. This package writes neither of them and reads 
    }
    ```
 
-   The alias value is the full publisher key, not a short name. `$join_sep` is conditional: an
+   An alias value is the full publisher key, not a short name. `$join_sep` is conditional: an
    absent chip leaves no dangling separator, so `$ide · $vim` still reads correctly. Without both
-   the alias and a slot that references it, Zentui reports the key as not active and the chip can
-   only reach the `$extensions` aggregate.
+   an alias and a slot that references it, Zentui reports that key as not active and the chip can
+   only reach the `$extensions` aggregate. Omit the `issues` alias or its slot reference to keep
+   only the LSP chip.
 
 Zentui's **Custom value colors** setting works as usual. Original (the default) renders the safe
-SGR sequences pi-lens publishes, so success, error and dim keep their meaning. Zentui strips the
-styling and still shows the text.
+SGR sequences pi-lens publishes, so the LSP chip's success, error and dim roles keep their
+meaning. Zentui strips the styling and still shows the text. The issues chip is plain text in
+either mode.
 
 ## Duplicate surface, accepted
 
-If you later enable Zentui's Starship Footer, alias `pi-lens-status:lsp` there too, **and** make
-`pi-lens-lsp` visible in extension statuses, the same value can appear twice. This package does
-not remove or rewrite pi-lens's own `pi-lens-lsp` publication, so it will not police another
-publisher's key. Leave one of the surfaces off.
+If you later enable Zentui's Starship Footer, alias `pi-lens-status:lsp` or
+`pi-lens-status:issues` there too, **and** make `pi-lens-lsp` or `pi-lens-issues` visible in
+extension statuses, the same value can appear twice. This package does not remove or rewrite
+pi-lens's own publications, so it will not police another publisher's key. Leave one of the
+surfaces off for each value.
 
-The extension-status footer is a separate surface. This package never writes `pi-lens-lsp` and
-never publishes under its own key there, so enabling that footer later still shows exactly what
-pi-lens wrote, once.
+The extension-status footer is a separate surface. This package never writes `pi-lens-lsp` or
+`pi-lens-issues` and never publishes under its own keys there, so enabling that footer later
+still shows exactly what pi-lens wrote, once.
 
 ## Test by hand
 
 With the configuration above and the checkout loaded first (see Development):
 
-1. Open a TypeScript project with a known error so pi-lens warms a server. The chip reads
+1. Open a TypeScript project with a known error so pi-lens warms a server. The LSP chip reads
    `LSP ✓` beside `$ide · $vim` before your first prompt. `/lens-health` agrees with it.
-2. Break the language-server configuration and start a new session. The chip reads `LSP ✗` in
+2. Break the language-server configuration and start a new session. The LSP chip reads `LSP ✗` in
    the error role.
-3. Start a new session with no warm servers. The chip reads a dim `LSP ✗`.
-4. Set `ui.hideLspStatus: true` in pi-lens's configuration. The chip disappears and stays gone.
-5. Disable Zentui, or remove the `lens` alias. pi-lens's normal status still reaches the
-   extension-status footer when you show it; enabling the alias again brings the chip back on
-   the next pi-lens repaint.
-6. Run `/reload` twice. The chip comes back exactly once — not twice, and not never.
-7. Switch sessions. The previous session's LSP chip does not linger.
-8. Set Zentui's custom-value colour mode to **Zentui**. The chip renders unstyled but still
-   reads `LSP ✓` / `LSP ✗`.
+3. Start a new session with no warm servers. The LSP chip reads a dim `LSP ✗`.
+4. With `ui.issuesStatus: true`, open a project with a known error and let pi-lens analyze a
+   file. The issues chip reads the current totals such as `●1E`; while a file is pending it
+   reads `⚠ N unchecked`, and after a checked file with no findings it reads `✓ clean`.
+5. Set `ui.hideLspStatus: true` in pi-lens's configuration. The LSP chip disappears and stays
+   gone; the issues chip is unaffected.
+6. Disable Zentui, or remove the `lens` or `issues` alias. pi-lens's normal statuses still reach
+   the extension-status footer when you show it; enabling an alias again brings that chip back
+   on the next repaint.
+7. Run `/reload` twice. Each chip comes back exactly once — not twice, and not never.
+8. Switch sessions. Neither previous session's chip lingers.
+9. Set Zentui's custom-value colour mode to **Zentui**. The LSP chip renders unstyled but still
+   reads `LSP ✓` / `LSP ✗`; the issues chip is unchanged.
 
 ## Retirement
 
-The package exists because pi-lens publishes LSP status only through `ctx.ui.setStatus`. If
+The package exists because pi-lens publishes its statuses only through `ctx.ui.setStatus`. If
 upstream publishes straight onto Zentui's custom-variable bus, delete this package entirely. If
-it adds a status event on `pi.events`, delete the tee (`src/tee.ts`) and feed the mirror from
-that event; fitting, deduplication, retry and publication stay unchanged.
+it adds status events on `pi.events`, delete the tee (`src/tee.ts`) and feed each mirror from
+those events; fitting, deduplication, retry and publication stay unchanged.
 
 ## Development
 

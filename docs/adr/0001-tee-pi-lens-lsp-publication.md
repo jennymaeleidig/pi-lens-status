@@ -1,6 +1,8 @@
 # 0001 — Tee pi-lens's `pi-lens-lsp` publication rather than derive LSP state ourselves
 
-**Status**: Accepted — 2026-11-13
+**Status**: Accepted — 2026-11-13. Amended by
+[0004](0004-mirror-the-issues-status-too.md): the tee now consumes `pi-lens-issues` too, and each
+key keeps its own channel.
 
 ## Context
 
